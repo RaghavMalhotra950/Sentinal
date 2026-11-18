@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel — Ops Console</title>
+<style>
+  :root {
+    --bg: #0a0e0f;
+    --panel: #11171a;
+    --panel-line: #1f2a2e;
+    --text: #c9d3d3;
+    --text-dim: #6f8386;
+    --ok: #3fa796;
+    --warn: #e8a33d;
+    --crit: #d64545;
+    --mono: "JetBrains Mono", "Consolas", monospace;
+    --sans: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    background-image: radial-gradient(circle at 15% 0%, #0d1417 0%, var(--bg) 45%);
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--panel-line);
+    background: linear-gradient(180deg, #0d1214, #0a0e0f);
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 26px; height: 26px;
+    border-radius: 6px;
+    background: linear-gradient(145deg, var(--ok), #266b60);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    box-shadow: 0 0 14px rgba(63,167,150,0.35);
+  }
+
+  header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    margin: 0;
+    line-height: 1.1;
+  }
+  header h1 span { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 1px; letter-spacing: 0.3px; }
+
+  .status-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-dim);
+  }
+  .dot.live { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .dot.down { background: var(--crit); box-shadow: 0 0 6px var(--crit); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 16px;
+    padding: 16px;
+    align-items: start;
+  }
+
+  .stats-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+  }
+
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 6px;
+    padding: 12px 14px;
+  }
+  .stat-card .stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .stat-card .stat-value {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .stat-card.crit .stat-value { color: var(--warn); }
+
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .cameras {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+  }
+
+  .cam-panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .cam-panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--panel-line);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .cam-panel-head b { color: var(--text); font-weight: 600; }
+
+  .rec-badge {
+    display: none;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: var(--crit);
+    letter-spacing: 0.5px;
+  }
+  .rec-badge.on { display: flex; }
+  .rec-badge .rec-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--crit);
+    box-shadow: 0 0 6px var(--crit);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  .cam-stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #05070a repeating-linear-gradient(
+      45deg, #0a0f11, #0a0f11 10px, #0b1214 10px, #0b1214 20px
+    );
+    overflow: hidden;
+  }
+
+  .cam-stage img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    pointer-events: none; /* clicks pass through to the canvas above */
+  }
+
+  .cam-stage canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+  }
+
+  .cam-video-input {
+    display: flex;
+    gap: 6px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--panel-line);
+  }
+  .cam-video-input input {
+    flex: 1;
+    background: #0d1315;
+    border: 1px solid var(--panel-line);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 8px;
+    border-radius: 4px;
+  }
+
+  .cam-hint {
+    position: absolute;
+    bottom: 8px; left: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #a9bcbc;
+    background: rgba(5, 7, 10, 0.72);
+    padding: 3px 7px;
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  .cam-debug {
+    padding: 6px 12px;
+    border-top: 1px solid var(--panel-line);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .cam-error {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 5;
+    background: rgba(140, 28, 28, 0.94);
+    color: #ffe3e3;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 9px 12px;
+    pointer-events: none;
+  }
+
+  #banners {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+  }
+  .banner {
+    padding: 9px 22px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .banner.err { background: #8c1c1c; color: #ffe3e3; }
+  .banner.warn { background: #6b4a12; color: #ffecc7; }
+
+  .zone-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--panel-line);
+  }
+
+  .zone-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 10px 8px;
+  }
+
+  .zone-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #161e21;
+    border: 1px solid var(--panel-line);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .zone-chip .swatch {
+    width: 8px; height: 8px; border-radius: 2px;
+  }
+  .zone-chip button {
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 1;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+  }
+  .zone-chip button:hover { color: var(--crit); border-color: transparent; }
+
+  button {
+    background: #161e21;
+    border: 1px solid var(--panel-line);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 12px;
+    padding: 6px 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+  button:hover { border-color: var(--ok); color: var(--ok); background: #14201f; }
+  button:active { transform: translateY(1px); }
+  button.active { border-color: var(--warn); color: var(--warn); background: #211b10; }
+
+  /* Sidebar */
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 6px;
+  }
+
+  .panel-head {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--panel-line);
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .panel-head small {
+    font-family: var(--mono);
+    font-weight: 400;
+    color: var(--text-dim);
+  }
+
+  #alert-log {
+    max-height: 420px;
+    overflow-y: auto;
+    padding: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--panel-line) transparent;
+  }
+  #alert-log::-webkit-scrollbar { width: 6px; }
+  #alert-log::-webkit-scrollbar-thumb { background: var(--panel-line); border-radius: 3px; }
+
+  .log-entry {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--panel-line);
+    border-left: 2px solid transparent;
+    color: var(--text-dim);
+    animation: entry-in 0.2s ease;
+  }
+  .log-entry.crit {
+    color: var(--warn);
+    background: rgba(232, 163, 61, 0.06);
+    border-left-color: var(--warn);
+  }
+  @keyframes entry-in {
+    from { opacity: 0; transform: translateY(-3px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .log-entry b { color: inherit; }
+  .log-time { color: var(--text-dim); margin-right: 6px; }
+
+  .empty-note {
+    padding: 16px 12px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+  .toggle-row + .toggle-row { border-top: 1px solid var(--panel-line); }
+
+  .switch {
+    width: 34px; height: 18px;
+    background: #1f2a2e;
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    border: 1px solid var(--panel-line);
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    width: 14px; height: 14px;
+    background: var(--text-dim);
+    border-radius: 50%;
+    top: 1px; left: 1px;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .switch.on { border-color: var(--ok); }
+  .switch.on::after { transform: translateX(16px); background: var(--ok); }
+
+  /* Full-screen alert flash */
+  #flash-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(214, 69, 69, 0.18);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 999;
+  }
+  #flash-overlay.active {
+    animation: flash 0.5s ease-out;
+  }
+  @keyframes flash {
+    0% { opacity: 0; }
+    15% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="banners">
+  <div id="page-errors"></div>
+  <div id="status-banners"></div>
+</div>
+<script>
+/* Runs first, so even if the main script crashes you still SEE the error. */
+(function () {
+  var box = document.getElementById("page-errors");
+  function add(msg) {
+    var d = document.createElement("div");
+    d.className = "banner err";
+    d.textContent = "Page error: " + msg + "  (press F12 > Console for details)";
+    box.appendChild(d);
+  }
+  window.addEventListener("error", function (e) {
+    add(e.message + (e.lineno ? " (line " + e.lineno + ")" : ""));
+  });
+  window.addEventListener("unhandledrejection", function (e) { add(String(e.reason)); });
+})();
+</script>
+
+<div id="flash-overlay"></div>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">🛰️</div>
+    <h1>SENTINEL<span>multi-camera zone intrusion alerting &middot; build 4</span></h1>
+  </div>
+  <div class="status-line">
+    <div class="dot" id="conn-dot"></div>
+    <span id="conn-text">connecting…</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Cameras online</div>
+      <div class="stat-value" id="stat-cameras">0 / 0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Zones defined</div>
+      <div class="stat-value" id="stat-zones">0</div>
+    </div>
+    <div class="stat-card crit">
+      <div class="stat-label">Intrusions logged</div>
+      <div class="stat-value" id="stat-intrusions">0</div>
+    </div>
+  </div>
+
+  <div class="cameras" id="camera-grid">
+    <!-- camera panels injected by JS -->
+  </div>
+
+  <div class="sidebar">
+
+    <div class="panel">
+      <div class="panel-head">
+        Alert log
+        <small id="alert-count">0 events</small>
+      </div>
+      <div id="alert-log">
+        <div class="empty-note">No events yet. Waiting on the feed…</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">Controls</div>
+      <div class="toggle-row">
+        <span>Demo mode (no backend needed)</span>
+        <div class="switch" id="demo-toggle"></div>
+      </div>
+      <div class="toggle-row">
+        <span>Sound on intrusion</span>
+        <div class="switch on" id="sound-toggle"></div>
+      </div>
+      <div class="toggle-row">
+        <span>Flash on intrusion</span>
+        <div class="switch on" id="flash-toggle"></div>
+      </div>
+      <div class="toggle-row">
+        <span>Check sound + flash + log</span>
+        <button id="test-alert">Test alert</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   SENTINEL — dashboard logic
+   Sections below: config, zone drawing, websocket, demo mode,
+   rendering, alerts. Read top to bottom, it's meant to be
+   followed in order.
+   ============================================================ */
+
+const CAMERAS = [
+  { id: "cam_1", label: "CAM 01 — sector north" },
+  { id: "cam_2", label: "CAM 02 — sector east" },
+];
+
+// Each camera can have several zone polygons. Each zone is
+// { id, color, points: [{x,y} in 0..1 fractions of the frame] }.
+const ZONE_COLORS = ["#e8a33d", "#3fa796", "#c97fd6", "#e86f6f", "#6fa8e8"];
+let zoneCounter = 0;
+
+const camStats = {};   // camera id -> { frames, objects, touching, lastFrameAt }
+
+let liveVideoCount = 0;
+let intrusionCount = 0;
+const loadedVideoCams = new Set();
+
+const state = {
+  connected: false,
+  demoMode: false,
+  soundOn: true,
+  flashOn: true,
+  zones: {},          // camera_id -> [zone, zone, ...]
+  drawing: null,       // { camId, zone } while a new zone is being drawn
+  latestBoxes: {},     // camera_id -> [{bbox, in_zone, confidence, ts}]
+  alertCount: 0,
+};
+
+/* ---------- build camera panels ---------- */
+
+const grid = document.getElementById("camera-grid");
+
+CAMERAS.forEach(cam => {
+  state.zones[cam.id] = [];
+  state.latestBoxes[cam.id] = [];
+  camStats[cam.id] = { frames: 0, objects: 0, touching: 0, lastFrameAt: 0 };
+
+  const panel = document.createElement("div");
+  panel.className = "cam-panel";
+  panel.innerHTML = `
+    <div class="cam-panel-head">
+      <b>${cam.label}</b>
+      <span class="rec-badge" data-rec="${cam.id}"><span class="rec-dot"></span>LIVE</span>
+    </div>
+    <div class="cam-stage">
+      <img data-cam-feed="${cam.id}" alt="${cam.id} feed">
+      <div class="cam-error" data-cam-error="${cam.id}"></div>
+      <canvas width="640" height="360" data-cam="${cam.id}"></canvas>
+      <div class="cam-hint" data-hint="${cam.id}">click to draw a sensitive zone</div>
+    </div>
+    <div class="cam-debug" data-debug="${cam.id}">no detection data yet - load a video</div>
+    <div class="cam-video-input">
+      <input type="text" placeholder="Paste a YouTube link or a video file path…" data-video-input="${cam.id}">
+      <button data-action="load-video" data-cam="${cam.id}">Load</button>
+    </div>
+    <div class="zone-list" data-zone-list="${cam.id}"></div>
+    <div class="zone-tools">
+      <button data-action="draw" data-mode="line" data-cam="${cam.id}">Danger line</button>
+      <button data-action="draw" data-mode="box" data-cam="${cam.id}">Box zone</button>
+      <button data-action="draw" data-mode="polygon" data-cam="${cam.id}">Draw zone</button>
+      <button data-action="clear" data-cam="${cam.id}">Clear all</button>
+    </div>
+  `;
+  grid.appendChild(panel);
+});
+
+updateStats();
+
+/* ---------- loading a YouTube video/stream into a camera panel ---------- */
+
+function updateDebug(camId) {
+  const el = document.querySelector(`[data-debug="${camId}"]`);
+  if (!el) return;
+  const st = camStats[camId];
+  const zones = state.zones[camId];
+  const lines = zones.filter(z => z.type === "line").length;
+  el.textContent =
+    `frames: ${st.frames} | objects seen: ${st.objects} | touching line/zone: ${st.touching}` +
+    ` | lines: ${lines} zones: ${zones.length - lines}`;
+}
+
+function setCamError(camId, text) {
+  const el = document.querySelector(`[data-cam-error="${camId}"]`);
+  if (!el) return;
+  el.textContent = text || "";
+  el.style.display = text ? "block" : "none";
+}
+
+function setCamStatus(camId, text) {
+  const hint = document.querySelector(`[data-hint="${camId}"]`);
+  if (hint) hint.textContent = text;
+  // anything the detector reports as an error is shown big, on the video
+  setCamError(camId, /^error/i.test(text) ? text : "");
+}
+
+/* banners for server problems (shown at the very top of the page) */
+const statusBanners = {};
+function showBanner(key, text, kind) {
+  statusBanners[key] = { text, kind: kind || "err" };
+  renderStatusBanners();
+}
+function clearBanner(key) {
+  delete statusBanners[key];
+  renderStatusBanners();
+}
+function renderStatusBanners() {
+  const box = document.getElementById("status-banners");
+  box.innerHTML = "";
+  Object.values(statusBanners).forEach(b => {
+    const d = document.createElement("div");
+    d.className = "banner " + b.kind;
+    d.textContent = b.text;
+    box.appendChild(d);
+  });
+}
+
+async function loadVideo(camId, source) {
+  setCamStatus(camId, "Starting...");
+  setCamError(camId, "");
+  try {
+    const res = await fetch(`/api/cameras/${camId}/source`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: source }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || res.statusText);
+    }
+  } catch (err) {
+    setCamStatus(camId, "click to draw a sensitive zone");
+    setCamError(camId, "Error: couldn't start detection - " + err.message);
+    return;
+  }
+  const img = document.querySelector(`img[data-cam-feed="${camId}"]`);
+  img.onerror = () => setCamError(camId,
+    "Error: the video stream stopped or failed to load. Check the PowerShell window for red text.");
+  img.src = `/video/${camId}?t=${Date.now()}`;
+  img.style.display = "block";
+  document.querySelector(`[data-rec="${camId}"]`)?.classList.add("on");
+  loadedVideoCams.add(camId);
+  camStats[camId].lastFrameAt = Date.now();
+  updateStats();
+}
+
+/* if the video is showing but no detection data arrives, say so loudly */
+setInterval(() => {
+  loadedVideoCams.forEach(camId => {
+    const silentFor = Date.now() - camStats[camId].lastFrameAt;
+    if (silentFor > 8000) {
+      setCamError(camId,
+        "Error: the video is showing but no detection data is arriving. " +
+        "Check the PowerShell window for red text, and that the top-right says 'live'.");
+    }
+  });
+}, 1000);
+
+document.querySelectorAll('[data-action="load-video"]').forEach(btn => {
+  btn.addEventListener("click", () => {
+    const cam = btn.dataset.cam;
+    const input = document.querySelector(`input[data-video-input="${cam}"]`);
+    if (input.value.trim()) loadVideo(cam, input.value.trim());
+  });
+});
+
+/* ---------- zone drawing (multiple zones per camera) ---------- */
+
+/* ---------- live stats strip ---------- */
+
+
+function updateStats() {
+  const totalZones = Object.values(state.zones).reduce((sum, z) => sum + z.length, 0);
+  document.getElementById("stat-cameras").textContent = `${loadedVideoCams.size} / ${CAMERAS.length}`;
+  document.getElementById("stat-zones").textContent = totalZones;
+  document.getElementById("stat-intrusions").textContent = intrusionCount;
+}
+
+function renderZoneList(camId) {
+  setTimeout(() => updateDebug(camId), 0);
+  const list = document.querySelector(`[data-zone-list="${camId}"]`);
+  list.innerHTML = "";
+  state.zones[camId].forEach(zone => {
+    const chip = document.createElement("div");
+    chip.className = "zone-chip";
+    chip.innerHTML = `
+      <span class="swatch" style="background:${zone.color}"></span>
+      <span>${zone.id} (${zone.type === "line" ? "line" : zone.points.length + "pt"})</span>
+      <button data-delete-zone="${zone.id}" data-cam="${camId}">✕</button>
+    `;
+    list.appendChild(chip);
+  });
+  updateStats();
+}
+
+const DRAW_LABELS = { line: "Danger line", box: "Box zone", polygon: "Draw zone" };
+
+function resetDrawButtons() {
+  document.querySelectorAll('[data-action="draw"]').forEach(b => {
+    b.classList.remove("active");
+    b.textContent = DRAW_LABELS[b.dataset.mode];
+  });
+}
+
+function finishDrawing() {
+  if (!state.drawing) return;
+  const { camId, zone, mode } = state.drawing;
+  const needed = mode === "polygon" ? 3 : 2;
+  if (zone.points.length < needed) {
+    // not enough points to make anything real - drop it
+    state.zones[camId] = state.zones[camId].filter(z => z.id !== zone.id);
+  }
+  state.drawing = null;
+  resetDrawButtons();
+  renderZoneList(camId);
+}
+
+document.querySelectorAll('[data-action="draw"]').forEach(btn => {
+  btn.addEventListener("click", () => {
+    const cam = btn.dataset.cam;
+    const mode = btn.dataset.mode;
+    const sameButton = state.drawing && state.drawing.camId === cam && state.drawing.mode === mode;
+
+    finishDrawing();          // close whatever was being drawn
+    if (sameButton) return;   // clicking the same button again = finish
+
+    zoneCounter++;
+    const zone = {
+      id: `${mode === "line" ? "line" : "zone"}_${zoneCounter}`,
+      type: mode === "line" ? "line" : "polygon",
+      color: ZONE_COLORS[(zoneCounter - 1) % ZONE_COLORS.length],
+      points: [],
+    };
+    state.zones[cam].push(zone);
+    state.drawing = { camId: cam, zone, mode };
+    btn.classList.add("active");
+    btn.textContent = mode === "polygon" ? "Finish zone" : "Click 2 points...";
+    renderZoneList(cam);
+  });
+});
+
+document.querySelectorAll('[data-action="clear"]').forEach(btn => {
+  btn.addEventListener("click", () => {
+    const cam = btn.dataset.cam;
+    state.zones[cam] = [];
+    if (state.drawing && state.drawing.camId === cam) state.drawing = null;
+    renderZoneList(cam);
+  });
+});
+
+grid.addEventListener("click", e => {
+  const delBtn = e.target.closest("[data-delete-zone]");
+  if (!delBtn) return;
+  const cam = delBtn.dataset.cam;
+  const zoneId = delBtn.dataset.deleteZone;
+  state.zones[cam] = state.zones[cam].filter(z => z.id !== zoneId);
+  renderZoneList(cam);
+});
+
+document.querySelectorAll(".cam-stage canvas").forEach(canvas => {
+  canvas.addEventListener("click", e => {
+    const cam = canvas.dataset.cam;
+    if (!state.drawing || state.drawing.camId !== cam) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const { zone, mode } = state.drawing;
+    zone.points.push({ x, y });
+    if (mode === "box" && zone.points.length === 2) {
+      const [a, b] = zone.points;
+      zone.points = [{ x: a.x, y: a.y }, { x: b.x, y: a.y }, { x: b.x, y: b.y }, { x: a.x, y: b.y }];
+      finishDrawing();
+    } else if (mode === "line" && zone.points.length === 2) {
+      finishDrawing();
+    } else {
+      renderZoneList(cam);
+    }
+  });
+});
+
+/* ---------- danger line: does a detection box touch the line? ---------- */
+
+function segmentsIntersect(p1, p2, p3, p4) {
+  const ccw = (a, b, c) => (c.y - a.y) * (b.x - a.x) > (b.y - a.y) * (c.x - a.x);
+  return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4);
+}
+
+function segmentHitsRect(a, b, r) {
+  const inside = p => p.x >= r.x1 && p.x <= r.x2 && p.y >= r.y1 && p.y <= r.y2;
+  if (inside(a) || inside(b)) return true;
+  const c = [{ x: r.x1, y: r.y1 }, { x: r.x2, y: r.y1 }, { x: r.x2, y: r.y2 }, { x: r.x1, y: r.y2 }];
+  for (let i = 0; i < 4; i++) {
+    if (segmentsIntersect(a, b, c[i], c[(i + 1) % 4])) return true;
+  }
+  return false;
+}
+
+/* ---------- point-in-polygon (for demo mode + optional client check) --- */
+
+function pointInPolygon(pt, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y;
+    const xj = poly[j].x, yj = poly[j].y;
+    const intersect =
+      yi > pt.y !== yj > pt.y &&
+      pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/* ---------- rendering loop ---------- */
+
+function render() {
+  CAMERAS.forEach(cam => {
+    const canvas = document.querySelector(`canvas[data-cam="${cam.id}"]`);
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // draw each zone polygon for this camera
+    state.zones[cam.id].forEach(zone => {
+      const pts = zone.points;
+      if (pts.length === 0) return;
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const px = p.x * canvas.width, py = p.y * canvas.height;
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      });
+      const isLine = zone.type === "line";
+      if (!isLine && pts.length > 2) ctx.closePath();
+      ctx.strokeStyle = zone.color;
+      ctx.lineWidth = isLine ? 3 : 2;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (isLine && pts.length === 2) {
+        ctx.font = "10px monospace";
+        ctx.fillStyle = zone.color;
+        ctx.fillText(zone.id, pts[0].x * canvas.width + 4, pts[0].y * canvas.height - 6);
+      }
+      if (!isLine && pts.length > 2) {
+        ctx.fillStyle = zone.color + "18"; // low-opacity fill
+        ctx.fill();
+        // label at the first point
+        ctx.font = "10px monospace";
+        ctx.fillStyle = zone.color;
+        ctx.fillText(zone.id, pts[0].x * canvas.width + 4, pts[0].y * canvas.height - 4);
+      }
+      pts.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x * canvas.width, p.y * canvas.height, 3, 0, 7);
+        ctx.fillStyle = zone.color;
+        ctx.fill();
+      });
+    });
+
+    // draw current detection boxes (fade out old ones)
+    const now = Date.now();
+    state.latestBoxes[cam.id] = state.latestBoxes[cam.id].filter(
+      b => now - b.receivedAt < 2500
+    );
+    state.latestBoxes[cam.id].forEach(b => {
+      const [x1, y1, x2, y2] = b.bbox;
+      const sx = canvas.width / b.frame_width;
+      const sy = canvas.height / b.frame_height;
+      ctx.strokeStyle = b.in_zone ? "#d64545" : "#3fa796";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x1 * sx, y1 * sy, (x2 - x1) * sx, (y2 - y1) * sy);
+      ctx.font = "10px monospace";
+      ctx.fillStyle = b.in_zone ? "#d64545" : "#3fa796";
+      ctx.fillText(
+        `${b.in_zone ? "INTRUSION " : ""}${b.label || "track"} ${Math.round(b.confidence * 100)}%`,
+        x1 * sx,
+        Math.max(10, y1 * sy - 4)
+      );
+    });
+  });
+
+  requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+
+/* ---------- alert log + sound + flash ---------- */
+
+const logEl = document.getElementById("alert-log");
+const countEl = document.getElementById("alert-count");
+
+let audioCtx = null;
+
+function beep() {
+  if (!state.soundOn) return;
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const ctx = audioCtx;
+  if (ctx.state === "suspended") ctx.resume();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "square";
+  osc.frequency.value = 880;
+  gain.gain.setValueAtTime(0.15, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.3);
+}
+
+function flashScreen() {
+  if (!state.flashOn) return;
+  const el = document.getElementById("flash-overlay");
+  el.classList.remove("active");
+  void el.offsetWidth; // restart animation
+  el.classList.add("active");
+}
+
+function logEvent(evt) {
+  if (logEl.querySelector(".empty-note")) logEl.innerHTML = "";
+
+  const row = document.createElement("div");
+  row.className = "log-entry" + (evt.in_zone ? " crit" : "");
+  const time = new Date(evt.timestamp).toLocaleTimeString();
+  row.innerHTML = `
+    <span class="log-time">${time}</span>
+    <b>${evt.camera_id}</b> —
+    ${evt.in_zone ? "ZONE INTRUSION" : "object tracked"}
+    (${Math.round(evt.confidence * 100)}% conf${evt.in_zone ? `, ${evt.zone_id}` : ""})
+  `;
+  logEl.prepend(row);
+
+  // cap log length so it doesn't grow forever
+  while (logEl.children.length > 100) logEl.removeChild(logEl.lastChild);
+
+  state.alertCount++;
+  countEl.textContent = `${state.alertCount} events`;
+
+  if (evt.in_zone) {
+    beep();
+    flashScreen();
+    intrusionCount++;
+    updateStats();
+    // Person A/B: this is where a Discord/Slack webhook call would go,
+    // ideally proxied through the backend rather than called from the
+    // browser directly. See README for notes.
+  }
+}
+
+/* ---------- handling incoming detection events ---------- */
+
+// The frontend always decides "is this in a zone?" for itself, using
+// whatever zones are currently drawn — this way it works correctly
+// whether the data is coming from the stub backend, the real YOLO
+// pipeline, or Demo mode, none of which need to know about zones
+// themselves.
+function checkZones(evt) {
+  const camZones = state.zones[evt.camera_id] || [];
+  if (camZones.length === 0) return { in_zone: false, zone_id: null };
+
+  const [x1, y1, x2, y2] = evt.bbox;
+  const centroid = {
+    x: (x1 + x2) / 2 / evt.frame_width,
+    y: (y1 + y2) / 2 / evt.frame_height,
+  };
+  const rect = {
+    x1: x1 / evt.frame_width, y1: y1 / evt.frame_height,
+    x2: x2 / evt.frame_width, y2: y2 / evt.frame_height,
+  };
+  const hit = camZones.find(z =>
+    z.type === "line"
+      ? z.points.length === 2 && segmentHitsRect(z.points[0], z.points[1], rect)
+      : z.points.length > 2 && pointInPolygon(centroid, z.points)
+  );
+  return hit ? { in_zone: true, zone_id: hit.id } : { in_zone: false, zone_id: null };
+}
+
+const lastAlertAt = {};   // "cam|zone" -> time of the last logged alert
+
+function handleFrame(msg) {
+  const cam = msg.camera_id;
+  if (!state.latestBoxes[cam]) return;
+  const now = Date.now();
+
+  const note = logEl.querySelector(".empty-note");
+  if (note) {
+    const totalZones = Object.values(state.zones).reduce((n, z) => n + z.length, 0);
+    note.textContent = totalZones === 0
+      ? "Detection is running. Draw a danger line or a zone to start getting alerts."
+      : "Watching... no intrusions yet.";
+  }
+
+  // replace the boxes with this frame's detections, zone-checked here
+  state.latestBoxes[cam] = msg.detections.map(d => ({
+    ...d,
+    ...checkZones({
+      camera_id: cam, bbox: d.bbox,
+      frame_width: msg.frame_width, frame_height: msg.frame_height,
+    }),
+    frame_width: msg.frame_width,
+    frame_height: msg.frame_height,
+    receivedAt: now,
+  }));
+
+  const st = camStats[cam];
+  st.frames++;
+  st.objects = state.latestBoxes[cam].length;
+  st.touching = state.latestBoxes[cam].filter(b => b.in_zone).length;
+  st.lastFrameAt = now;
+  updateDebug(cam);
+
+  // log an intrusion at most once every 4 seconds per zone
+  state.latestBoxes[cam].forEach(b => {
+    if (!b.in_zone) return;
+    const key = cam + "|" + b.zone_id;
+    if (now - (lastAlertAt[key] || 0) < 4000) return;
+    lastAlertAt[key] = now;
+    logEvent({
+      camera_id: cam, in_zone: true, zone_id: b.zone_id,
+      confidence: b.confidence, timestamp: new Date().toISOString(),
+    });
+  });
+}
+
+function handleDetection(rawEvt) {
+  const zoneResult = checkZones(rawEvt);
+  const evt = { ...rawEvt, ...zoneResult };
+  state.latestBoxes[evt.camera_id]?.push({ ...evt, receivedAt: Date.now() });
+  logEvent(evt);
+}
+
+/* ---------- websocket connection to the real backend ---------- */
+
+let ws = null;
+
+function connectWebSocket() {
+  if (state.demoMode) return;
+  ws = new WebSocket(`ws://${location.host}/ws`);
+
+  ws.onopen = () => setConnStatus(true);
+  ws.onclose = () => {
+    setConnStatus(false);
+    if (!state.demoMode) setTimeout(connectWebSocket, 2000); // auto-reconnect
+  };
+  ws.onerror = () => ws.close();
+  ws.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.type === "detection") handleDetection(data);
+    else if (data.type === "frame") handleFrame(data);
+    else if (data.type === "status") setCamStatus(data.camera_id, data.message);
+  };
+}
+
+function setConnStatus(connected) {
+  state.connected = connected;
+  const dot = document.getElementById("conn-dot");
+  const text = document.getElementById("conn-text");
+  if (connected || state.demoMode) {
+    clearBanner("server");
+  } else {
+    showBanner("server",
+      "Lost connection to the Sentinel server. Check that the PowerShell window is still running uvicorn, then refresh this page.",
+      "warn");
+  }
+  if (state.demoMode) {
+    dot.className = "dot live";
+    text.textContent = "demo mode — simulated feed";
+  } else {
+    dot.className = "dot " + (connected ? "live" : "down");
+    text.textContent = connected ? "live — connected to backend" : "disconnected, retrying…";
+  }
+}
+
+/* ---------- demo mode: fake detections in the browser, no backend ---- */
+
+let demoInterval = null;
+
+function startDemo() {
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
+  setConnStatus(true);
+  demoInterval = setInterval(() => {
+    const cam = CAMERAS[Math.floor(Math.random() * CAMERAS.length)];
+    const bbox = [
+      Math.random() * 400,
+      Math.random() * 200,
+      0, 0,
+    ];
+    bbox[2] = bbox[0] + 80 + Math.random() * 100;
+    bbox[3] = bbox[1] + 80 + Math.random() * 100;
+
+    const centroid = {
+      x: (bbox[0] + bbox[2]) / 2 / 640,
+      y: (bbox[1] + bbox[3]) / 2 / 360,
+    };
+    const camZones = state.zones[cam.id];
+    const hitZone = camZones.find(z => z.points.length > 2 && pointInPolygon(centroid, z.points));
+    const inZone = !!hitZone;
+
+    handleDetection({
+      type: "detection",
+      camera_id: cam.id,
+      track_id: Math.floor(Math.random() * 9999),
+      bbox,
+      frame_width: 640,
+      frame_height: 360,
+      confidence: 0.6 + Math.random() * 0.35,
+      in_zone: inZone,
+      zone_id: hitZone ? hitZone.id : null,
+      timestamp: new Date().toISOString(),
+    });
+  }, 700);
+}
+
+function stopDemo() {
+  clearInterval(demoInterval);
+  connectWebSocket();
+}
+
+/* ---------- toggles ---------- */
+
+document.getElementById("demo-toggle").addEventListener("click", function () {
+  state.demoMode = !state.demoMode;
+  this.classList.toggle("on", state.demoMode);
+  state.demoMode ? startDemo() : stopDemo();
+});
+
+document.getElementById("test-alert").addEventListener("click", () => {
+  logEvent({
+    camera_id: "TEST", in_zone: true, zone_id: "test_alert",
+    confidence: 1, timestamp: new Date().toISOString(),
+  });
+});
+
+document.getElementById("sound-toggle").addEventListener("click", function () {
+  state.soundOn = !state.soundOn;
+  this.classList.toggle("on", state.soundOn);
+});
+
+document.getElementById("flash-toggle").addEventListener("click", function () {
+  state.flashOn = !state.flashOn;
+  this.classList.toggle("on", state.flashOn);
+});
+
+/* ---------- go ---------- */
+
+connectWebSocket();
+</script>
+
+</body>
+</html>
