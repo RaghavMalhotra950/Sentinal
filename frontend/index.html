@@ -524,6 +524,8 @@
    followed in order.
    ============================================================ */
 
+const IS_STATIC_DEMO = location.hostname.endsWith(".github.io");
+
 const CAMERAS = [
   { id: "cam_1", label: "CAM 01 — sector north" },
   { id: "cam_2", label: "CAM 02 — sector east" },
@@ -542,7 +544,7 @@ const loadedVideoCams = new Set();
 
 const state = {
   connected: false,
-  demoMode: false,
+  demoMode: IS_STATIC_DEMO,
   soundOn: true,
   flashOn: true,
   zones: {},          // camera_id -> [zone, zone, ...]
@@ -640,6 +642,10 @@ function renderStatusBanners() {
 }
 
 async function loadVideo(camId, source) {
+  if (IS_STATIC_DEMO) {
+    setCamError(camId, "Live detection is not available on GitHub Pages. Run the FastAPI backend locally or host it separately.");
+    return;
+  }
   setCamStatus(camId, "Starting...");
   setCamError(camId, "");
   try {
@@ -1055,7 +1061,8 @@ let ws = null;
 
 function connectWebSocket() {
   if (state.demoMode) return;
-  ws = new WebSocket(`ws://${location.host}/ws`);
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${protocol}//${location.host}/ws`);
 
   ws.onopen = () => setConnStatus(true);
   ws.onclose = () => {
@@ -1139,6 +1146,7 @@ function stopDemo() {
 /* ---------- toggles ---------- */
 
 document.getElementById("demo-toggle").addEventListener("click", function () {
+  if (IS_STATIC_DEMO) return;
   state.demoMode = !state.demoMode;
   this.classList.toggle("on", state.demoMode);
   state.demoMode ? startDemo() : stopDemo();
@@ -1163,7 +1171,29 @@ document.getElementById("flash-toggle").addEventListener("click", function () {
 
 /* ---------- go ---------- */
 
-connectWebSocket();
+if (IS_STATIC_DEMO) {
+  const demoToggle = document.getElementById("demo-toggle");
+  demoToggle.classList.add("on");
+  demoToggle.setAttribute("aria-disabled", "true");
+  demoToggle.title = "Demo mode is always enabled on the GitHub Pages build.";
+
+  document.querySelectorAll("[data-video-input]").forEach(input => {
+    input.disabled = true;
+    input.placeholder = "Live detection requires the FastAPI backend";
+  });
+  document.querySelectorAll('[data-action="load-video"]').forEach(button => {
+    button.disabled = true;
+  });
+
+  showBanner(
+    "pages",
+    "You are viewing the GitHub Pages demo. Interactive zones and simulated detections work here; live video and YOLO detection require the FastAPI backend.",
+    "warn"
+  );
+  startDemo();
+} else {
+  connectWebSocket();
+}
 </script>
 
 </body>
