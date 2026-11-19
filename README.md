@@ -4,6 +4,16 @@ A weekend hackathon project: watch video streams (YouTube live/recorded),
 detect objects with YOLO, and raise an alert when something enters a
 user-defined "sensitive zone."
 
+## Live demo
+
+- Landing page: https://raghavmalhotra950.github.io/Sentinal/
+- Interactive dashboard: https://raghavmalhotra950.github.io/Sentinal/app/
+
+The GitHub Pages build runs the frontend in browser-based demo mode, so zone
+drawing, simulated detections, alerts, sound, and screen flashes work online.
+GitHub Pages cannot run the Python FastAPI/YOLO backend; live video detection
+requires deploying `backend/` to a Python-capable host.
+
 ## Team
 
 - **Person A** — stream ingestion (YouTube → OpenCV), YOLOv8 detection,
